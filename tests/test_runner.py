@@ -11,7 +11,7 @@ from ytgui.core.options import DownloadOptions
 from ytgui.core.runner import DownloadJob, child_env
 
 FAKE_YTDLP = """#!PYTHON
-import os, sys, time
+import os, signal, subprocess, sys, time
 mode = os.environ.get("FAKE_MODE", "ok")
 argv = sys.argv[1:]
 if "--print" in argv:
@@ -27,6 +27,15 @@ if os.environ.get("FAKE_ARGV"):
 if mode == "private":
     print("ERROR: [youtube] abc: Private video. Sign in if you've been granted access", file=sys.stderr)
     sys.exit(1)
+if mode in ("stubborn", "childonly"):
+    if mode == "stubborn":
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    child = subprocess.Popen([sys.executable, "-c", "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"])
+    with open(os.environ["FAKE_PIDS"], "w", encoding="utf-8") as f:
+        f.write(str(os.getpid()) + "\\n" + str(child.pid) + "\\n")
+    time.sleep(0.5)  # дать потомку успеть выставить SIG_IGN
+    print("YTG|downloading|2000|4000|NA|500.0|3", flush=True)
+    time.sleep(30)
 if "--yes-playlist" in argv:
     print("[download] Downloading item 1 of 2", flush=True)
 print("YTG|downloading|1000|4000|NA|500.0|6", flush=True)
@@ -138,12 +147,15 @@ def test_cancel_while_running_terminates_quickly(tmp_path, fake, monkeypatch):
     thread = threading.Thread(target=lambda: box.update(result=job.run()))
     started = time.monotonic()
     thread.start()
-    assert reached.wait(10)
-    job.cancel()
-    thread.join(10)
-    assert not thread.is_alive()
-    assert box["result"].status == "cancelled"
-    assert time.monotonic() - started < 10
+    try:
+        assert reached.wait(10)
+        job.cancel()
+        thread.join(10)
+        assert not thread.is_alive()
+        assert box["result"].status == "cancelled"
+        assert time.monotonic() - started < 10
+    finally:
+        job.cancel()
 
 
 def test_cancel_before_start_never_spawns(tmp_path, fake):
@@ -217,3 +229,75 @@ def test_child_env_has_homebrew_and_unbuffered_output():
     env = child_env()
     assert "/opt/homebrew/bin" in env["PATH"].split(os.pathsep)
     assert env["PYTHONUNBUFFERED"] == "1" and env["PYTHONIOENCODING"] == "utf-8"
+
+
+def read_pids(path):
+    return [int(x) for x in path.read_text(encoding="utf-8").split()]
+
+
+def wait_gone(pids, timeout=2.0):
+    deadline = time.monotonic() + timeout
+    alive = list(pids)
+    while alive and time.monotonic() < deadline:
+        still = []
+        for pid in alive:
+            try:
+                os.kill(pid, 0)
+                still.append(pid)
+            except ProcessLookupError:
+                pass
+        alive = still
+        if alive:
+            time.sleep(0.05)
+    return alive
+
+
+@pytest.mark.parametrize("mode", ["stubborn", "childonly"])
+def test_cancel_kills_stubborn_process_and_its_child(tmp_path, fake, monkeypatch, mode):
+    # stubborn: yt-dlp и ffmpeg игнорируют SIGTERM; childonly: yt-dlp умирает, а ffmpeg держит pipe
+    pids_file = tmp_path / "pids.txt"
+    monkeypatch.setenv("FAKE_MODE", mode)
+    monkeypatch.setenv("FAKE_PIDS", str(pids_file))
+    reached = threading.Event()
+    job, _ = make_job(tmp_path, fake)
+    job._on_event = lambda e: reached.set() if e.kind == "download" and e.percent == 50.0 else None
+    box = {}
+    thread = threading.Thread(target=lambda: box.update(result=job.run()))
+    started = time.monotonic()
+    thread.start()
+    try:
+        assert reached.wait(10)
+        job.cancel()
+        thread.join(5)
+        assert not thread.is_alive()
+        assert box["result"].status == "cancelled"
+        assert time.monotonic() - started < 6
+        pids = read_pids(pids_file)
+        assert len(pids) == 2
+        assert wait_gone(pids) == []
+    finally:
+        job.cancel()
+        thread.join(5)
+
+
+@pytest.mark.parametrize("error", [RuntimeError("boom"), OSError(5, "boom")])
+def test_failing_callback_does_not_leave_process_behind(tmp_path, fake, monkeypatch, error):
+    pids_file = tmp_path / "pids.txt"
+    monkeypatch.setenv("FAKE_MODE", "stubborn")
+    monkeypatch.setenv("FAKE_PIDS", str(pids_file))
+    job, _ = make_job(tmp_path, fake)
+
+    def boom(event):
+        if event.kind == "download":
+            raise error
+
+    job._on_event = boom
+    try:
+        result = job.run()
+        assert result.status == "error" and "Внутренняя ошибка" in result.message
+        assert "Не удалось запустить" not in result.message
+        pids = read_pids(pids_file)
+        assert len(pids) == 2
+        assert wait_gone(pids) == []
+    finally:
+        job.cancel()

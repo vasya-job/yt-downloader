@@ -24,6 +24,10 @@ class _Cancelled(Exception):
     pass
 
 
+class _LaunchFailed(Exception):
+    pass
+
+
 def child_env() -> dict[str, str]:
     env = dict(os.environ)
     dirs = [bundled_dir(), *SYSTEM_DIRS]
@@ -54,6 +58,7 @@ class DownloadJob:
         self._lock = threading.Lock()
         self._proc: subprocess.Popen | None = None
         self._cancelled = False
+        self._kill_timer: threading.Timer | None = None
         self._tail: deque[str] = deque(maxlen=MAX_TAIL_LINES)
 
     # ---- публичный интерфейс -------------------------------------------------
@@ -62,11 +67,13 @@ class DownloadJob:
         with self._lock:
             self._cancelled = True
             proc = self._proc
-        if proc is not None:
-            self._signal_group(proc, signal.SIGTERM)
-            timer = threading.Timer(self._kill_grace, self._signal_group, (proc, signal.SIGKILL))
+            if proc is None or self._kill_timer is not None:
+                return
+            timer = threading.Timer(self._kill_grace, self._force_kill, (proc,))
             timer.daemon = True
+            self._kill_timer = timer
             timer.start()
+        self._signal_group(proc, signal.SIGTERM)
 
     def run(self) -> JobResult:
         options = self._options
@@ -96,8 +103,10 @@ class DownloadJob:
             return self._download(options, ytdlp, ffmpeg)
         except _Cancelled:
             return JobResult("cancelled", "Отменено")
-        except OSError as exc:
-            return JobResult("error", f"Не удалось запустить yt-dlp: {exc.strerror or exc}")
+        except _LaunchFailed as exc:
+            return JobResult("error", f"Не удалось запустить yt-dlp: {exc}")
+        except Exception as exc:  # например, сбой в обработчике событий
+            return JobResult("error", f"Внутренняя ошибка: {exc}")
 
     # ---- внутреннее ------------------------------------------------------------
 
@@ -110,22 +119,40 @@ class DownloadJob:
         except (ProcessLookupError, PermissionError):
             pass
 
+    def _force_kill(self, proc: subprocess.Popen) -> None:
+        # Без проверки poll(): группа может жить, даже если yt-dlp уже завершился (ffmpeg держит pipe).
+        # Лидер не reaped, пока _stream не вызвал proc.wait(), поэтому pid не переиспользован.
+        with self._lock:
+            if self._proc is not proc:
+                return
+            self._kill_group(proc)
+
+    @staticmethod
+    def _kill_group(proc: subprocess.Popen) -> None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
     def _stream(self, cmd: list[str], handle_line: Callable[[str], None]) -> int:
         with self._lock:
             if self._cancelled:
                 raise _Cancelled
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                start_new_session=True,
-                env=child_env(),
-            )
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                    start_new_session=True,
+                    env=child_env(),
+                )
+            except OSError as exc:
+                raise _LaunchFailed(exc.strerror or str(exc)) from exc
             self._proc = proc
         try:
             for raw in proc.stdout:
@@ -135,8 +162,14 @@ class DownloadJob:
             return proc.wait()
         finally:
             with self._lock:
+                timer, self._kill_timer = self._kill_timer, None
+                if timer is not None:
+                    timer.cancel()
+                if proc.returncode is None:
+                    self._kill_group(proc)  # при выходе по исключению не оставляем процесс сиротой
+                    proc.wait()
+                proc.stdout.close()
                 self._proc = None
-            proc.stdout.close()
 
     def _with_unique_name(
         self, options: DownloadOptions, ytdlp: str
