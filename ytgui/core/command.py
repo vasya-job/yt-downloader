@@ -32,7 +32,7 @@ def playlist_template(template: str) -> str:
 
 def literal_template(rel_dir: str, stem: str) -> str:
     """Шаблон -o для уже известного имени: `%` экранируется, расширение подставит yt-dlp."""
-    return os.path.join(rel_dir, stem.replace("%", "%%")) + ".%(ext)s"
+    return os.path.join(rel_dir.replace("%", "%%"), stem.replace("%", "%%")) + ".%(ext)s"
 
 
 def _cookies(o: DownloadOptions) -> list[str]:

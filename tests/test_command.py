@@ -94,3 +94,4 @@ def test_probe_command():
 def test_literal_template_escapes_percent():
     assert literal_template("", "100% Love (1)") == "100%% Love (1).%(ext)s"
     assert literal_template("Sub", "a [b]") == "Sub/a [b].%(ext)s"
+    assert literal_template("100% Hits", "a [b] (1)") == "100%% Hits/a [b] (1).%(ext)s"
