@@ -13,9 +13,9 @@ from ytgui.core.errors import FFMPEG_MISSING, YTDLP_MISSING, explain
         ("ERROR: [youtube] abc: Video unavailable. This video contains content from X, who has blocked it in your country", "недоступно"),
         ("ERROR: [youtube] abc: Requested format is not available. Use --list-formats for a list of available formats", "формат"),
         ("ERROR: Unsupported URL: https://example.com/x", "не поддерживается"),
-        ("ERROR: Postprocessing: ffprobe and ffmpeg not found. Please install or provide the path using --ffmpeg-location", "ffmpeg"),
+        ("ERROR: Postprocessing: ffprobe and ffmpeg not found. Please install or provide the path using --ffmpeg-location", "не найден ffmpeg"),
         ("ERROR: unable to download video data: <urlopen error [Errno 8] nodename nor servname provided, or not known>", "интернет"),
-        ("ERROR: could not find chrome cookies database in \"/Users/x/Library\"", "cookies"),
+        ("ERROR: could not find chrome cookies database in \"/Users/x/Library\"", "cookies браузера"),
     ],
 )
 def test_known_errors(line, expected):
@@ -59,3 +59,15 @@ def test_long_message_is_truncated():
 def test_tool_missing_constants_mention_brew():
     assert "brew install ffmpeg" in FFMPEG_MISSING
     assert "brew install yt-dlp" in YTDLP_MISSING
+
+
+def test_http_403_error():
+    text = explain(["ERROR: unable to download webpage: HTTP Error 403: Forbidden"], 1)
+    assert "отказал" in text
+    assert "интернет" not in text.lower()
+
+
+def test_http_429_error():
+    text = explain(["ERROR: [youtube] abc: Unable to download webpage: HTTP Error 429: Too Many Requests"], 1)
+    assert "отказал" in text
+    assert "интернет" not in text.lower()

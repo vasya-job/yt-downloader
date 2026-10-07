@@ -31,7 +31,11 @@ _RULES = (
         "Не удалось прочитать cookies браузера. Закройте браузер или выберите другой.",
     ),
     (
-        r"unable to download|getaddrinfo|nodename nor servname|temporary failure|timed out|network is unreachable|connection reset|ssl|http error 5",
+        r"http error (403|429)",
+        "YouTube отказал в доступе или временно ограничил запросы (HTTP 403/429). Подождите немного и повторите, либо выберите браузер в поле cookies.",
+    ),
+    (
+        r"getaddrinfo|nodename nor servname|urlopen error|temporary failure|timed out|network is unreachable|connection reset|ssl:|certificate verify|http error 5",
         "Нет связи с YouTube. Проверьте интернет и повторите.",
     ),
 )
