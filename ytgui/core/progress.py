@@ -1,6 +1,7 @@
 """Разбор строк stdout yt-dlp и форматирование размеров."""
 from __future__ import annotations
 
+import math
 import re
 
 from ytgui.core.command import PROGRESS_PREFIX
@@ -19,8 +20,11 @@ _STAGES = (
 
 def _number(raw: str) -> float | None:
     try:
-        return float(raw)
-    except ValueError:
+        value = float(raw)
+        if math.isfinite(value) and value >= 0:
+            return value
+        return None
+    except (ValueError, OverflowError):
         return None
 
 

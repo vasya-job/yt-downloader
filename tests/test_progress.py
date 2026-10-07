@@ -71,3 +71,47 @@ def test_describe_download():
     assert describe_download(ev) == "12,4 МБ из 20,0 МБ (1,8 МБ/с)"
     assert describe_download(ProgressEvent("download", downloaded=2048)) == "2,0 КБ"
     assert describe_download(ProgressEvent("download")) == ""
+
+
+def test_nan_downloaded_does_not_raise():
+    ev = parse_line("YTG|downloading|nan|100|NA|NA|NA")
+    assert ev.kind == "download"
+    assert ev.downloaded is None and ev.percent is None
+
+
+def test_inf_downloaded_does_not_raise():
+    ev = parse_line("YTG|downloading|inf|100|NA|NA|NA")
+    assert ev.kind == "download"
+    assert ev.downloaded is None and ev.percent is None
+
+
+def test_inf_total_does_not_raise():
+    ev = parse_line("YTG|downloading|10|inf|NA|NA|NA")
+    assert ev.kind == "download"
+    assert ev.total is None and ev.percent is None
+
+
+def test_nan_speed_and_inf_eta_do_not_raise():
+    ev = parse_line("YTG|downloading|10|100|NA|nan|inf")
+    assert ev.kind == "download"
+    assert ev.downloaded == 10 and ev.total == 100
+    assert ev.speed is None and ev.eta is None
+
+
+def test_overflow_1e400_does_not_raise():
+    ev = parse_line("YTG|downloading|1e400|100|NA|NA|NA")
+    assert ev.kind == "download"
+    assert ev.downloaded is None and ev.percent is None
+
+
+def test_non_numeric_downloaded_does_not_raise():
+    ev = parse_line("YTG|downloading|abc|NA|NA|NA|NA")
+    assert ev.kind == "download"
+    assert ev.downloaded is None and ev.percent is None
+
+
+def test_negative_values_do_not_appear():
+    ev = parse_line("YTG|downloading|-5|100|NA|-3|-1")
+    assert ev.kind == "download"
+    assert ev.downloaded is None and ev.percent is None
+    assert ev.speed is None and ev.eta is None
