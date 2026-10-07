@@ -25,6 +25,9 @@ FORMAT_LABELS = {"mp3": "MP3", "m4a": "M4A", "opus": "OPUS", "wav": "WAV", "mp4"
 HEIGHT_LABELS = {None: "Лучшее", 1080: "1080p", 720: "720p", 480: "480p"}
 BROWSER_LABELS = {None: "Нет", "chrome": "Chrome", "firefox": "Firefox", "edge": "Edge"}
 
+# Потоки, которые не успели завершиться при закрытии окна: держим обёртку живой до конца процесса.
+_ORPHAN_WORKERS: list = []
+
 
 def quality_text(quality: int) -> str:
     if quality == 0:
@@ -136,7 +139,10 @@ class MainWindow(QWidget):
         status_row = QHBoxLayout()
         self.status_label = QLabel("Готов к загрузке")
         self.status_label.setObjectName("status")
+        self.status_label.setWordWrap(True)
+        self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.detail_label = QLabel("")
+        self.detail_label.setTextFormat(Qt.TextFormat.PlainText)
         self.detail_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         status_row.addWidget(self.status_label, 1)
         status_row.addWidget(self.detail_label)
@@ -214,7 +220,9 @@ class MainWindow(QWidget):
 
     def _fit_height(self) -> None:
         self.layout().activate()
-        height = self.sizeHint().height()
+        height = self.layout().totalHeightForWidth(WINDOW_WIDTH)
+        if height <= 0:
+            height = self.sizeHint().height()
         if self.height() != height:
             self.resize(WINDOW_WIDTH, height)
 
@@ -223,6 +231,7 @@ class MainWindow(QWidget):
         self.status_label.setProperty("error", error)
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
+        self._fit_height()
 
     def _append_log(self, text: str) -> None:
         self.log.appendPlainText(text)
@@ -356,5 +365,6 @@ class MainWindow(QWidget):
         worker = self._worker
         if worker is not None:
             worker.cancel()
-            worker.wait(5000)
+            if not worker.wait(5000):
+                _ORPHAN_WORKERS.append(worker)
         event.accept()

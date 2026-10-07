@@ -233,3 +233,47 @@ def test_close_cancels_running_worker(window):
 
 def test_window_width_is_fixed(window):
     assert window.minimumWidth() == window.maximumWidth() == 680
+
+
+# ---- fix round 1 -------------------------------------------------------------
+
+
+def test_long_status_wraps_and_window_grows(window):
+    window.show()
+    window._set_status("Коротко")
+    short_height = window.height()
+    window._set_status("Очень длинное сообщение об ошибке, которое не помещается в одну строку. " * 3, error=True)
+    assert window.minimumSizeHint().width() <= 680
+    assert window.width() == 680
+    assert window.height() > short_height
+
+
+def test_status_and_detail_are_plain_text(window):
+    from PySide6.QtCore import Qt
+
+    text = "ошибка <b>bold</b> & <x>"
+    window._set_status(text, error=True)
+    assert window.status_label.text() == text
+    assert window.status_label.textFormat() == Qt.TextFormat.PlainText
+    assert window.detail_label.textFormat() == Qt.TextFormat.PlainText
+
+
+class StuckWorker(FakeWorker):
+    def wait(self, msecs=0):
+        return False
+
+
+def test_close_keeps_stuck_worker_alive(app, tmp_path):
+    from ytgui.ui import main_window
+
+    main_window._ORPHAN_WORKERS.clear()
+    try:
+        win = MainWindow(settings_path=tmp_path / "settings.json", worker_factory=StuckWorker)
+        fill(win)
+        win.download_button.click()
+        worker = FakeWorker.instances[-1]
+        win.closeEvent(QCloseEvent())
+        assert worker.cancelled
+        assert worker in main_window._ORPHAN_WORKERS
+    finally:
+        main_window._ORPHAN_WORKERS.clear()
