@@ -2619,8 +2619,8 @@ Run: `chmod +x packaging/fetch_binaries.sh packaging/build_app.sh`
 
 Run:
 ```bash
-curl -sI -L "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip" | head -5
-curl -sI -L "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos" | grep -i '^HTTP' | tail -1
+curl -s -L -o /dev/null -w "%{http_code}\n" "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+curl -s -L -o /dev/null -w "%{http_code}\n" "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
 ```
 Expected: ответы `200`. Если ссылка на ffmpeg не работает, остановиться и сообщить пользователю, не подставлять другой источник самостоятельно.
 
