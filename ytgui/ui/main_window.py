@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from ytgui import __version__
 from ytgui.core import settings as settings_store
 from ytgui.core.options import (
     AUDIO_FORMATS, COOKIE_BROWSERS, DEFAULT_TEMPLATE, HEIGHT_LIMITS, VIDEO_FORMATS,
@@ -154,6 +155,11 @@ class MainWindow(QWidget):
         self.log.setFixedHeight(96)
         self.log.setPlaceholderText("Здесь появится журнал загрузки")
         root.addWidget(self.log)
+
+        self.version_label = QLabel(f"Версия {__version__}")
+        self.version_label.setObjectName("version")
+        self.version_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        root.addWidget(self.version_label)
 
         self._locked_while_running = (
             self.url_edit, self.audio_radio, self.video_radio, self.format_combo, self.height_combo,

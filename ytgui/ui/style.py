@@ -10,4 +10,5 @@ QPushButton#primary:disabled { background: #8ab4f8; color: white; }
 QProgressBar { border: none; background: palette(midlight); border-radius: 4px; max-height: 8px; }
 QProgressBar::chunk { background: #1a73e8; border-radius: 4px; }
 QLabel#status[error="true"] { color: #d93025; }
+QLabel#version { color: palette(mid); font-size: 11px; }
 """

@@ -5,6 +5,12 @@ import sys
 
 
 def main() -> int:
+    if "--version" in sys.argv:
+        from ytgui import __version__
+
+        print(f"YT Загрузчик {__version__}")
+        return 0
+
     if "--self-check" in sys.argv:
         from ytgui.core.paths import find_tool
 

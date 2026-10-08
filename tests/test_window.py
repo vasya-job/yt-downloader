@@ -3,6 +3,7 @@ from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import QApplication, QFileDialog
 
+import ytgui
 from ytgui.core.events import JobResult, ProgressEvent
 from ytgui.core.options import Mode
 from ytgui.ui.main_window import MainWindow
@@ -277,3 +278,7 @@ def test_close_keeps_stuck_worker_alive(app, tmp_path):
         assert worker in main_window._ORPHAN_WORKERS
     finally:
         main_window._ORPHAN_WORKERS.clear()
+
+
+def test_version_label_shows_program_version(window):
+    assert window.version_label.text() == f"Версия {ytgui.__version__}"
