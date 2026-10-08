@@ -282,3 +282,156 @@ def test_close_keeps_stuck_worker_alive(app, tmp_path):
 
 def test_version_label_shows_program_version(window):
     assert window.version_label.text() == f"Версия {ytgui.__version__}"
+
+
+# ---- понятные имена файлов ---------------------------------------------------
+
+PRESET_LABELS = ["Название", "Автор — Название", "Название [код видео]", "Дата — Название", "Свой шаблон…"]
+
+
+def combo_labels(combo):
+    return [combo.itemText(i) for i in range(combo.count())]
+
+
+def test_template_combo_lists_presets_and_custom_last(window):
+    from ytgui.core.templates import PRESETS
+
+    assert combo_labels(window.template_combo) == PRESET_LABELS
+    assert [window.template_combo.itemData(i) for i in range(4)] == [t for _l, t in PRESETS]
+    assert window.template_combo.itemData(4) is None
+
+
+def test_default_shows_first_preset_and_hides_custom_row(window):
+    assert window.template_combo.currentText() == "Название"
+    assert window.template_edit.text() == "%(title)s.%(ext)s"
+    assert not window.template_container.isVisibleTo(window)
+
+
+def test_choosing_preset_writes_template(window):
+    window.template_combo.setCurrentIndex(1)
+    assert window.template_edit.text() == "%(uploader)s - %(title)s.%(ext)s"
+    assert window.template_combo.currentIndex() == 1
+    assert not window.template_container.isVisibleTo(window)
+
+
+def test_choosing_custom_shows_row_and_keeps_text(window):
+    window.template_combo.setCurrentIndex(2)
+    window.template_combo.setCurrentIndex(4)
+    assert window.template_container.isVisibleTo(window)
+    assert window.template_edit.text() == "%(title)s [%(id)s].%(ext)s"
+
+
+def test_non_preset_text_selects_custom_and_shows_row(window):
+    window.template_edit.setText("%(title)s - %(id)s.%(ext)s")
+    assert window.template_combo.currentText() == "Свой шаблон…"
+    assert window.template_combo.currentData() is None
+    assert window.template_container.isVisibleTo(window)
+
+
+def test_preset_text_selects_preset_and_hides_row(window):
+    window.template_edit.setText("%(abc)s")
+    assert window.template_container.isVisibleTo(window)
+    window.template_edit.setText("%(title)s [%(id)s].%(ext)s")
+    assert window.template_combo.currentIndex() == 2
+    assert not window.template_container.isVisibleTo(window)
+
+
+def test_typing_does_not_flip_combo_to_preset_while_focused(window, monkeypatch):
+    window.template_edit.setText("%(title)s")
+    assert window.template_combo.currentData() is None
+    monkeypatch.setattr(type(window.template_edit), "hasFocus", lambda self: True)
+    window.template_edit.setText("%(title)s.%(ext)s")  # как будто дописали до пресета
+    assert window.template_combo.currentData() is None
+    assert window.template_container.isVisibleTo(window)
+    monkeypatch.undo()
+    window.template_edit.editingFinished.emit()
+    assert window.template_combo.currentIndex() == 0
+    assert not window.template_container.isVisibleTo(window)
+
+
+def test_custom_row_shows_hint_with_tokens(window):
+    hint = window.template_hint.text()
+    for token in ("%(title)s", "%(uploader)s", "%(upload_date)s", "%(id)s", "%(ext)s"):
+        assert token in hint
+    assert "плейлист" in hint
+
+
+def test_window_height_follows_custom_row(window):
+    window.show()
+    base = window.height()
+    window.template_combo.setCurrentIndex(4)
+    assert window.height() > base
+    window.template_combo.setCurrentIndex(0)
+    assert window.height() == base
+
+
+def test_example_for_default_follows_format(window):
+    assert window.template_example.text() == "Название ролика.mp3"
+    window.format_combo.setCurrentIndex(3)
+    assert window.template_example.text() == "Название ролика.wav"
+    window.video_radio.setChecked(True)
+    assert window.template_example.text() == "Название ролика.mp4"
+
+
+def test_example_follows_template_and_playlist(window):
+    window.template_combo.setCurrentIndex(3)
+    assert window.template_example.text() == "2026-10-08 - Название ролика.mp3"
+    window.template_combo.setCurrentIndex(0)
+    window.url_edit.setText("https://www.youtube.com/playlist?list=PL1")
+    assert window.template_example.text() == "Название ролика.mp3"
+    window.playlist_check.setChecked(True)
+    assert window.template_example.text() == "03 - Название ролика.mp3"
+    window.playlist_check.setChecked(False)
+    assert window.template_example.text() == "Название ролика.mp3"
+
+
+def test_example_label_is_plain_wrapped_text(window):
+    from PySide6.QtCore import Qt
+
+    assert window.template_example.objectName() == "template_example"
+    assert window.template_example.wordWrap()
+    assert window.template_example.textFormat() == Qt.TextFormat.PlainText
+
+
+def test_custom_template_without_extension_gets_one_in_options(window):
+    fill(window)
+    window.template_edit.setText("  мой %(title)s  ")
+    assert window.template_example.text() == "мой Название ролика.mp3"
+    window.download_button.click()
+    assert FakeWorker.instances[-1].options.template == "мой %(title)s.%(ext)s"
+
+
+def test_empty_template_falls_back_to_default_in_options(window):
+    fill(window)
+    window.template_edit.setText("   ")
+    window.download_button.click()
+    assert FakeWorker.instances[-1].options.template == "%(title)s.%(ext)s"
+
+
+def test_preset_is_passed_to_worker(window):
+    fill(window)
+    window.template_combo.setCurrentIndex(1)
+    window.download_button.click()
+    assert FakeWorker.instances[-1].options.template == "%(uploader)s - %(title)s.%(ext)s"
+
+
+def test_template_combo_locked_while_running(window):
+    fill(window)
+    assert window.template_combo.isEnabled()
+    window.download_button.click()
+    assert not window.template_combo.isEnabled() and not window.template_edit.isEnabled()
+    FakeWorker.instances[-1].done.emit(JobResult("ok", "Готово", 0))
+    assert window.template_combo.isEnabled()
+
+
+def test_template_settings_restore_selects_preset_or_custom(app, tmp_path):
+    import json
+
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"template": "%(title)s [%(id)s].%(ext)s"}), encoding="utf-8")
+    win = MainWindow(settings_path=path, worker_factory=FakeWorker)
+    assert win.template_combo.currentIndex() == 2 and not win.template_container.isVisibleTo(win)
+    path.write_text(json.dumps({"template": "%(id)s.%(ext)s"}), encoding="utf-8")
+    win = MainWindow(settings_path=path, worker_factory=FakeWorker)
+    assert win.template_combo.currentData() is None and win.template_container.isVisibleTo(win)
+    assert win.template_edit.text() == "%(id)s.%(ext)s"

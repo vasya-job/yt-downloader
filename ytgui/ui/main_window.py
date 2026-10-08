@@ -18,6 +18,7 @@ from ytgui.core.options import (
     DownloadOptions, Mode, is_playlist_url,
 )
 from ytgui.core.progress import describe_download
+from ytgui.core.templates import CUSTOM_LABEL, PRESETS, ensure_extension, preset_index, preview_name
 from ytgui.ui.style import STYLESHEET
 from ytgui.ui.worker import DownloadWorker
 
@@ -25,6 +26,11 @@ WINDOW_WIDTH = 680
 FORMAT_LABELS = {"mp3": "MP3", "m4a": "M4A", "opus": "OPUS", "wav": "WAV", "mp4": "MP4", "mkv": "MKV", "webm": "WebM"}
 HEIGHT_LABELS = {None: "Лучшее", 1080: "1080p", 720: "720p", 480: "480p"}
 BROWSER_LABELS = {None: "Нет", "chrome": "Chrome", "firefox": "Firefox", "edge": "Edge"}
+
+TEMPLATE_HINT = (
+    "%(title)s — название, %(uploader)s — автор, %(upload_date)s — дата, "
+    "%(id)s — код видео, %(ext)s — расширение. Для плейлиста номер добавляется сам."
+)
 
 # Потоки, которые не успели завершиться при закрытии окна: держим обёртку живой до конца процесса.
 _ORPHAN_WORKERS: list = []
@@ -102,12 +108,32 @@ class MainWindow(QWidget):
         quality_layout.setContentsMargins(0, 0, 0, 0)
         quality_layout.addWidget(self.quality_slider, 1)
         quality_layout.addWidget(self.quality_value)
+        self.template_combo = QComboBox()
+        for label, template in PRESETS:
+            self.template_combo.addItem(label, template)
+        self.template_combo.addItem(CUSTOM_LABEL, None)
         self.template_edit = QLineEdit()
+        self.template_hint = QLabel(TEMPLATE_HINT)
+        self.template_hint.setObjectName("template_hint")
+        self.template_hint.setWordWrap(True)
+        self.template_hint.setTextFormat(Qt.TextFormat.PlainText)
+        self.template_container = QWidget()
+        template_layout = QVBoxLayout(self.template_container)
+        template_layout.setContentsMargins(0, 0, 0, 0)
+        template_layout.setSpacing(4)
+        template_layout.addWidget(self.template_edit)
+        template_layout.addWidget(self.template_hint)
+        self.template_example = QLabel()
+        self.template_example.setObjectName("template_example")
+        self.template_example.setWordWrap(True)
+        self.template_example.setTextFormat(Qt.TextFormat.PlainText)
         self.cookies_combo = QComboBox()
         for browser in COOKIE_BROWSERS:
             self.cookies_combo.addItem(BROWSER_LABELS[browser], browser)
         self._par_form.addRow("Качество аудио", self.quality_row)
-        self._par_form.addRow("Шаблон имени", self.template_edit)
+        self._par_form.addRow("Имя файла", self.template_combo)
+        self._par_form.addRow("Свой шаблон", self.template_container)
+        self._par_form.addRow("Пример", self.template_example)
         self._par_form.addRow("Cookies из браузера", self.cookies_combo)
         root.addWidget(par_box)
 
@@ -163,7 +189,7 @@ class MainWindow(QWidget):
 
         self._locked_while_running = (
             self.url_edit, self.audio_radio, self.video_radio, self.format_combo, self.height_combo,
-            self.template_edit, self.cookies_combo, self.folder_edit, self.browse_button,
+            self.template_combo, self.template_edit, self.cookies_combo, self.folder_edit, self.browse_button,
             self.open_folder_check,
         )
 
@@ -174,6 +200,10 @@ class MainWindow(QWidget):
         self.audio_radio.toggled.connect(self._on_mode_changed)
         self.format_combo.currentIndexChanged.connect(self._on_format_changed)
         self.quality_slider.valueChanged.connect(self._on_quality_changed)
+        self.template_combo.currentIndexChanged.connect(self._on_template_choice)
+        self.template_edit.textChanged.connect(self._on_template_text)
+        self.template_edit.editingFinished.connect(self._sync_template_combo)
+        self.playlist_check.toggled.connect(self._update_template_example)
         self.browse_button.clicked.connect(self._browse)
         self.download_button.clicked.connect(self._start)
         self.cancel_button.clicked.connect(self._cancel)
@@ -204,6 +234,39 @@ class MainWindow(QWidget):
         self._formats[self._mode_key()] = self.format_combo.currentData()
         self._refresh()
 
+    def _template(self) -> str:
+        """Шаблон, который уйдёт в yt-dlp: единственный источник правды — template_edit."""
+        return ensure_extension(self.template_edit.text())
+
+    def _on_template_choice(self) -> None:
+        template = self.template_combo.currentData()
+        if template is None:  # «Свой шаблон…»: текст остаётся, правка в поле
+            self._refresh()
+            self.template_edit.setFocus()
+            return
+        self.template_edit.setText(template)  # textChanged подтянет остальное
+        self._refresh()
+
+    def _on_template_text(self) -> None:
+        if not self.template_edit.hasFocus():  # во время набора комбо не прыгает на пресет
+            self._sync_template_combo()
+        else:
+            self._update_template_example()
+
+    def _sync_template_combo(self) -> None:
+        index = preset_index(self.template_edit.text().strip())
+        target = len(PRESETS) if index is None else index
+        if self.template_combo.currentIndex() != target:
+            self.template_combo.blockSignals(True)
+            self.template_combo.setCurrentIndex(target)
+            self.template_combo.blockSignals(False)
+        self._refresh()
+
+    def _update_template_example(self) -> None:
+        self.template_example.setText(
+            preview_name(self._template(), self._formats[self._mode_key()], self.playlist_check.isChecked())
+        )
+
     def _on_quality_changed(self) -> None:
         self.quality_value.setText(quality_text(self._quality()))
 
@@ -215,6 +278,8 @@ class MainWindow(QWidget):
             self.playlist_check.setChecked(False)
         self.playlist_check.setEnabled(is_playlist and not running)
         self._par_form.setRowVisible(self.quality_row, audio)
+        self._par_form.setRowVisible(self.template_container, self.template_combo.currentData() is None)
+        self._update_template_example()
         self._fmt_form.setRowVisible(self.height_combo, not audio)
         for widget in self._locked_while_running:
             widget.setEnabled(not running)
@@ -285,7 +350,7 @@ class MainWindow(QWidget):
             audio_quality=self._quality(),
             video_format=self._formats["video"],
             max_height=self.height_combo.currentData(),
-            template=self.template_edit.text().strip() or DEFAULT_TEMPLATE,
+            template=self._template(),
             cookies_browser=self.cookies_combo.currentData(),
             playlist=self.playlist_check.isChecked(),
         )

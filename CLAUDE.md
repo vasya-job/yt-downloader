@@ -9,7 +9,7 @@
 
 ## Структура
 ```
-ytgui/core/    options, command, events, progress, errors, paths, settings, runner (без Qt)
+ytgui/core/    options, command, templates, events, progress, errors, paths, settings, runner (без Qt)
 ytgui/ui/      main_window, worker (QThread), style
 ytgui/__main__.py   запуск; флаг --self-check печатает найденные yt-dlp и ffmpeg
 tests/         юнит-тесты (без сети), tests/e2e — реальные загрузки (только YTGUI_E2E=1)
@@ -18,7 +18,7 @@ packaging/     fetch_binaries.sh, build_app.sh (PyInstaller), make_icon.py, icon
 
 ## Команды (из корня проекта)
 - Среда: `/opt/homebrew/bin/python3.11 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt` (на Python 3.14 PySide6 не ставится).
-- Запуск: `.venv/bin/python -m ytgui`. Тесты: `.venv/bin/python -m pytest -q` (ожидается 148 passed, 10 skipped). Реальные загрузки: `YTGUI_E2E=1 .venv/bin/python -m pytest tests/e2e` (нужна сеть и ffprobe).
+- Запуск: `.venv/bin/python -m ytgui`. Тесты: `.venv/bin/python -m pytest -q` (ожидается 191 passed, 10 skipped). Реальные загрузки: `YTGUI_E2E=1 .venv/bin/python -m pytest tests/e2e` (нужна сеть и ffprobe).
 - Сборка `.app`: `packaging/fetch_binaries.sh` (yt-dlp и ffmpeg в `packaging/bin`), затем `packaging/build_app.sh` → `dist/YT Downloader.app`. После сборки приложение копируется в `~/Applications`.
 
 ## Правила проекта (обязательно)
