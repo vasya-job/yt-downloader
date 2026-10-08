@@ -7,7 +7,7 @@ import time
 import pytest
 
 from ytgui.core.events import ProgressEvent
-from ytgui.core.options import DownloadOptions
+from ytgui.core.options import DownloadOptions, Mode
 from ytgui.core.runner import DownloadJob, child_env
 
 FAKE_YTDLP = """#!PYTHON
@@ -96,6 +96,33 @@ def test_existing_file_gets_numeric_suffix_in_template(tmp_path, fake, monkeypat
     assert any("Song (1).mp3" in e.text for e in events if e.kind == "line")
 
 
+def _run_and_get_template(tmp_path, fake, monkeypatch, **kw):
+    argv_file = tmp_path / "argv.txt"
+    monkeypatch.setenv("FAKE_ARGV", str(argv_file))
+    job, _ = make_job(tmp_path, fake, **kw)
+    assert job.run().status == "ok"
+    argv = argv_file.read_text(encoding="utf-8").split("\n")
+    return argv[argv.index("-o") + 1]
+
+
+def test_audio_mode_does_not_reuse_existing_webm_intermediate(tmp_path, fake, monkeypatch):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "Song.webm").write_text("")
+    template = _run_and_get_template(tmp_path, fake, monkeypatch)
+    assert template == "Song (1).%(ext)s"
+
+
+def test_video_mode_ignores_other_extensions(tmp_path, fake, monkeypatch):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "Song.webm").write_text("")
+    template = _run_and_get_template(
+        tmp_path, fake, monkeypatch, mode=Mode.VIDEO, video_format="mp4"
+    )
+    assert template == "%(title)s.%(ext)s"
+
+
 def test_free_name_keeps_user_template(tmp_path, fake, monkeypatch):
     argv_file = tmp_path / "argv.txt"
     monkeypatch.setenv("FAKE_ARGV", str(argv_file))
@@ -128,6 +155,13 @@ def test_unavailable_video_fails_at_probe(tmp_path, fake, monkeypatch):
     monkeypatch.setenv("FAKE_MODE", "unavailable")
     result = make_job(tmp_path, fake)[0].run()
     assert result.status == "error" and "недоступно" in result.message
+
+
+def test_probe_failure_output_reaches_the_log(tmp_path, fake, monkeypatch):
+    monkeypatch.setenv("FAKE_MODE", "unavailable")
+    job, events = make_job(tmp_path, fake)
+    job.run()
+    assert any("This video is unavailable" in e.text for e in events if e.kind == "line")
 
 
 def test_playlist_counts_skipped_files(tmp_path, fake, monkeypatch):
@@ -229,6 +263,14 @@ def test_child_env_has_homebrew_and_unbuffered_output():
     env = child_env()
     assert "/opt/homebrew/bin" in env["PATH"].split(os.pathsep)
     assert env["PYTHONUNBUFFERED"] == "1" and env["PYTHONIOENCODING"] == "utf-8"
+
+
+def test_child_env_drops_pyinstaller_bootloader_variables(monkeypatch):
+    monkeypatch.setenv("_PYI_ARCHIVE_FILE", "x")
+    monkeypatch.setenv("_PYI_APPLICATION_HOME_DIR", "y")
+    env = child_env()
+    assert "_PYI_ARCHIVE_FILE" not in env and "_PYI_APPLICATION_HOME_DIR" not in env
+    assert env["PYINSTALLER_RESET_ENVIRONMENT"] == "1"
 
 
 def read_pids(path):

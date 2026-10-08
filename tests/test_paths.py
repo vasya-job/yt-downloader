@@ -78,3 +78,11 @@ def test_unique_stem_with_special_and_cyrillic_names(tmp_path):
 
 def test_unique_stem_missing_folder_is_free(tmp_path):
     assert paths.unique_stem(str(tmp_path / "нет"), "Song", "mp3") == "Song"
+
+
+def test_unique_stem_also_extensions_collide(tmp_path):
+    (tmp_path / "Song.webm").write_text("")
+    assert paths.unique_stem(str(tmp_path), "Song", "mp3") == "Song"
+    assert paths.unique_stem(str(tmp_path), "Song", "mp3", also=("webm", "m4a")) == "Song (1)"
+    (tmp_path / "Song (1).m4a").write_text("")
+    assert paths.unique_stem(str(tmp_path), "Song", "mp3", also=("webm", "m4a")) == "Song (2)"

@@ -39,12 +39,17 @@ def _cookies(o: DownloadOptions) -> list[str]:
     return ["--cookies-from-browser", o.cookies_browser] if o.cookies_browser else []
 
 
+def _single_item() -> list[str]:
+    # Для ссылки вида /playlist?list=… одного --no-playlist мало: берём только первый элемент.
+    return ["--no-playlist", "--playlist-items", "1"]
+
+
 def build_command(o: DownloadOptions, ytdlp: str = "yt-dlp", ffmpeg: str | None = None) -> list[str]:
     cmd = [ytdlp, "--newline", "--progress-template", PROGRESS_TEMPLATE]
     if ffmpeg:
         cmd += ["--ffmpeg-location", ffmpeg]
     cmd += _cookies(o)
-    cmd += ["--yes-playlist", "--no-overwrites"] if o.playlist else ["--no-playlist"]
+    cmd += ["--yes-playlist", "--no-overwrites"] if o.playlist else _single_item()
     if o.mode is Mode.AUDIO:
         cmd += ["-x", "--audio-format", o.audio_format]
         if o.audio_format != "wav":
@@ -59,7 +64,10 @@ def build_command(o: DownloadOptions, ytdlp: str = "yt-dlp", ffmpeg: str | None 
 
 def build_probe_command(o: DownloadOptions, ytdlp: str = "yt-dlp") -> list[str]:
     """Команда, которая печатает будущее имя файла (`YTGFILE|<имя>`), ничего не скачивая."""
-    cmd = [ytdlp, "--simulate", "--no-playlist", "--print", PROBE_PREFIX + "%(filename)s"]
+    cmd = [ytdlp, "--simulate"]
+    if not o.playlist:
+        cmd += _single_item()
+    cmd += ["--print", PROBE_PREFIX + "%(filename)s"]
     cmd += ["-o", o.template]
     cmd += _cookies(o)
     cmd.append(o.clean_url)
