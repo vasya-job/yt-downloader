@@ -26,6 +26,8 @@ packaging/fetch_binaries.sh   # yt-dlp и ffmpeg в packaging/bin
 packaging/build_app.sh        # dist/YT Downloader.app
 ```
 
+Иконка генерируется скриптом `packaging/make_icon.py` (пересоздать: `.venv/bin/python packaging/make_icon.py`).
+
 Настройки: `~/Library/Application Support/YT Загрузчик/settings.json`.
 
 ## Ограничения и заметки

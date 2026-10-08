@@ -7,7 +7,8 @@ for tool in yt-dlp ffmpeg ffprobe; do
 done
 rm -rf build dist
 .venv/bin/python -m PyInstaller --noconfirm --windowed --name "YT Downloader" \
-  --osx-bundle-identifier local.ytgui.downloader --paths . packaging/entry.py
+  --osx-bundle-identifier local.ytgui.downloader --icon packaging/icon.icns \
+  --paths . packaging/entry.py
 APP="dist/YT Downloader.app"
 mkdir -p "$APP/Contents/Resources/bin"
 cp packaging/bin/yt-dlp packaging/bin/ffmpeg packaging/bin/ffprobe "$APP/Contents/Resources/bin/"
