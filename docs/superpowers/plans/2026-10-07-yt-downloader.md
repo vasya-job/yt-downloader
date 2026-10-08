@@ -21,7 +21,6 @@
 - Юнит-тесты не ходят в сеть и не пишут вне `tmp_path`. Сетевые проверки только в `tests/e2e` с `YTGUI_E2E=1`; скачанные файлы только в `tmp_path`/scratchpad, не в проект.
 - Тесты запускаются так: `.venv/bin/python -m pytest <путь> -v` из корня проекта.
 - Каждый коммит заканчивается трейлером: `-m "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"` (вторым `-m`).
-- Копии на диск `base` (disky-backup) не делать без просьбы пользователя.
 
 ## Review Focus
 
