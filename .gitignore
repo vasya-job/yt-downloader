@@ -7,3 +7,5 @@ build/
 dist/
 *.spec.bak
 packaging/bin/
+*.spec
+.claude/worktrees/

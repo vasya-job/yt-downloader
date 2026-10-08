@@ -14,6 +14,7 @@ from ytgui.core.errors import FFMPEG_MISSING, YTDLP_MISSING, explain
         ("ERROR: [youtube] abc: Requested format is not available. Use --list-formats for a list of available formats", "формат"),
         ("ERROR: Unsupported URL: https://example.com/x", "не поддерживается"),
         ("ERROR: Postprocessing: ffprobe and ffmpeg not found. Please install or provide the path using --ffmpeg-location", "не найден ffmpeg"),
+        ("ERROR: ffprobe not found. Please install", "не найден ffmpeg"),
         ("ERROR: unable to download video data: <urlopen error [Errno 8] nodename nor servname provided, or not known>", "интернет"),
         ("ERROR: could not find chrome cookies database in \"/Users/x/Library\"", "cookies браузера"),
     ],
@@ -59,6 +60,7 @@ def test_long_message_is_truncated():
 def test_tool_missing_constants_mention_brew():
     assert "brew install ffmpeg" in FFMPEG_MISSING
     assert "brew install yt-dlp" in YTDLP_MISSING
+    assert "`" not in FFMPEG_MISSING and "`" not in YTDLP_MISSING
 
 
 def test_http_403_error():

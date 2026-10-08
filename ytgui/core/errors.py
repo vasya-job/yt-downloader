@@ -4,8 +4,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-FFMPEG_MISSING = "Не найден ffmpeg. Установите его командой `brew install ffmpeg` и повторите."
-YTDLP_MISSING = "Не найден yt-dlp. Установите его командой `brew install yt-dlp` и повторите."
+FFMPEG_MISSING = "Не найден ffmpeg. Установите его: brew install ffmpeg — и повторите."
+YTDLP_MISSING = "Не найден yt-dlp. Установите его: brew install yt-dlp — и повторите."
 
 _COOKIES_HINT = "Выберите в поле cookies браузер, где вы вошли в YouTube, и повторите."
 
@@ -25,7 +25,7 @@ _RULES = (
         "У этого видео нет выбранного формата или качества. Попробуйте другой формат.",
     ),
     (r"unsupported url", "Эта ссылка не поддерживается."),
-    (r"ffprobe and ffmpeg not found|ffmpeg not found|ffmpeg is not installed", FFMPEG_MISSING),
+    (r"ffprobe and ffmpeg not found|ffprobe not found|ffmpeg not found|ffmpeg is not installed", FFMPEG_MISSING),
     (
         r"cookies database|failed to decrypt|keyring|could not copy .*cookie",
         "Не удалось прочитать cookies браузера. Закройте браузер или выберите другой.",

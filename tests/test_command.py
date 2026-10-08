@@ -20,7 +20,7 @@ def test_audio_mp3_command_is_exact():
     cmd = build_command(make(audio_format="mp3", audio_quality=2))
     assert cmd == [
         "yt-dlp", "--newline", "--progress-template", PROGRESS_TEMPLATE,
-        "--no-playlist",
+        "--no-playlist", "--playlist-items", "1",
         "-x", "--audio-format", "mp3", "--audio-quality", "2",
         "-P", "/tmp/out", "-o", "%(title)s.%(ext)s",
         "https://youtu.be/abc",
@@ -95,3 +95,19 @@ def test_literal_template_escapes_percent():
     assert literal_template("", "100% Love (1)") == "100%% Love (1).%(ext)s"
     assert literal_template("Sub", "a [b]") == "Sub/a [b].%(ext)s"
     assert literal_template("100% Hits", "a [b] (1)") == "100%% Hits/a [b] (1).%(ext)s"
+
+
+PLAYLIST_URL = "https://www.youtube.com/playlist?list=PL1"
+
+
+def test_playlist_link_without_checkbox_takes_only_first_item():
+    o = make(url=PLAYLIST_URL, playlist=False)
+    for cmd in (build_command(o), build_probe_command(o)):
+        at = cmd.index("--no-playlist")
+        assert cmd[at + 1: at + 3] == ["--playlist-items", "1"]
+
+
+def test_playlist_link_with_checkbox_has_neither_flag():
+    o = make(url=PLAYLIST_URL, playlist=True)
+    for cmd in (build_command(o), build_probe_command(o)):
+        assert "--no-playlist" not in cmd and "--playlist-items" not in cmd

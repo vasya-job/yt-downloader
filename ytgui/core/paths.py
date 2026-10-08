@@ -41,11 +41,15 @@ def find_tool(name: str, extra_dirs: Sequence[str] | None = None) -> str | None:
     return None
 
 
-def unique_stem(folder: str, stem: str, ext: str) -> str:
-    """Имя без расширения, при котором `folder/<имя>.<ext>` ещё не существует: `Song`, `Song (1)`, …"""
+def unique_stem(folder: str, stem: str, ext: str, also: Sequence[str] = ()) -> str:
+    """Имя без расширения, при котором `folder/<имя>.<ext>` (и `<имя>.<e>` для e из `also`) не существует.
+
+    Примеры: `Song`, `Song (1)`, …
+    """
+    exts = (ext, *also)
     candidate = stem
     number = 0
-    while os.path.exists(os.path.join(folder, f"{candidate}.{ext}")):
+    while any(os.path.exists(os.path.join(folder, f"{candidate}.{e}")) for e in exts):
         number += 1
         candidate = f"{stem} ({number})"
     return candidate

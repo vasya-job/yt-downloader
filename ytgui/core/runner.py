@@ -12,12 +12,13 @@ from collections.abc import Callable
 from ytgui.core.command import PROBE_PREFIX, build_command, build_probe_command, literal_template
 from ytgui.core.errors import FFMPEG_MISSING, YTDLP_MISSING, explain
 from ytgui.core.events import JobResult, ProgressEvent
-from ytgui.core.options import DownloadOptions
+from ytgui.core.options import DownloadOptions, Mode
 from ytgui.core.paths import SYSTEM_DIRS, bundled_dir, find_tool, unique_stem
 from ytgui.core.progress import parse_line
 
 KILL_GRACE_SECONDS = 3.0
 MAX_TAIL_LINES = 400
+AUDIO_INTERMEDIATE_EXTS = ("webm", "m4a", "mp4")
 
 
 class _Cancelled(Exception):
@@ -29,7 +30,9 @@ class _LaunchFailed(Exception):
 
 
 def child_env() -> dict[str, str]:
-    env = dict(os.environ)
+    # Замороженный yt-dlp (PyInstaller) не должен унаследовать окружение загрузчика нашего приложения.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("_PYI_")}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     dirs = [bundled_dir(), *SYSTEM_DIRS]
     if env.get("PATH"):
         dirs.append(env["PATH"])
@@ -187,10 +190,14 @@ class DownloadJob:
         if self._cancelled:
             raise _Cancelled
         if code != 0 or not names:
+            for text in lines:
+                self._on_event(ProgressEvent("line", text=text))
             return options, JobResult("error", explain(lines, code), code)
         rel_dir, base = os.path.split(names[-1])
         stem = os.path.splitext(base)[0]
-        unique = unique_stem(os.path.join(options.folder, rel_dir), stem, options.final_ext)
+        # При -x промежуточный файл (webm/m4a/mp4) yt-dlp считает уже скачанным и удаляет после извлечения звука.
+        also = AUDIO_INTERMEDIATE_EXTS if options.mode is Mode.AUDIO else ()
+        unique = unique_stem(os.path.join(options.folder, rel_dir), stem, options.final_ext, also)
         if unique == stem:
             return options, None
         self._on_event(
